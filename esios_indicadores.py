@@ -186,10 +186,17 @@ if __name__ == "__main__":
     # indicator_ids_full = df_id['id'].tolist()
 
 
+
+
     # PREVISIONES d+1
+    indicator_ids = indicator_previsiones + [600]
+    time_trunc = 'hour'
+    geo_ids = [8741, 3]
+    start_date = datetime(2023, 1, 1)
+    end_date = datetime(2025, 6, 30)
     df_previsiones = pd.DataFrame()
-    for indicator_id in indicator_previsiones:
-        data = get_esios_data_raw(indicator_id, datetime(2024, 1, 1), datetime(2024, 12, 31), geo_ids, api_key, time_agg=time_agg, time_trunc=time_trunc)
+    for indicator_id in indicator_ids:
+        data = get_esios_data_raw(indicator_id, start_date, end_date, geo_ids, api_key, time_agg=time_agg, time_trunc=time_trunc)
         # print(data)
         if data is None:
             print(f"No se pudo obtener datos para el indicador {indicator_id}.")
@@ -200,7 +207,7 @@ if __name__ == "__main__":
 
         df_previsiones = pd.concat([df_previsiones, df])
 
-    df_previsiones.to_csv('data/esios_previsiones_d+1.csv', index=False)
+    df_previsiones.to_csv('data_training/esios_previsiones_d+1.csv', index=False)
 
 
     
