@@ -15,8 +15,6 @@ from email.mime.multipart import MIMEMultipart
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.connector import execute_query, insertar_dataframe_en_mysql, update_dataframe_en_mysql, enviar_email_alerta
-
 pd.set_option('display.width', None)
 pd.set_option('display.max_columns', None)
 pd.set_option('display.expand_frame_repr', False)
@@ -119,7 +117,7 @@ def tratamiento_dataframe_sql(df, price_column_name='Spain'):
 
 
 
-def proceso_completo_extraccion(start_dt, end_dt, auth_url, auth_payload):
+def proceso_completo_extraccion_modificado(start_dt, end_dt, auth_url, auth_payload):
     token = get_token(auth_url, auth_payload)
 
     df_omie_global = pd.DataFrame()
@@ -139,74 +137,12 @@ def proceso_completo_extraccion(start_dt, end_dt, auth_url, auth_payload):
 
     # Hacemos pivot -> transformamos los valores de la columna Zone en columnas distintas, asignando el precio como valor
     df_omie_global_pivot = df_omie_global.pivot(index=['Year', 'Month', 'Day', 'Hour', 'Periodo'], columns='Zone', values='val').reset_index()
-    print(df_omie_global_pivot)
-
-    # Insertamos en la base de datos
-    insertar_dataframe_en_mysql(df_omie_global_pivot, 'diario_qh', 'omie')
-
     df_omie_horario = df_omie_global_pivot.groupby(['Year', 'Month', 'Day', 'Hour'], as_index=False)[['Spain', 'Portugal']].mean()
-    print(df_omie_horario)
-    insertar_dataframe_en_mysql(df_omie_horario, 'diario', 'omie')
 
-
-    # === Comprobamos que se han obtenido los datos para el día de mañana ===
-    tomorrow_df = df_omie_global_pivot.loc[(df_omie_global_pivot['Day'] == end_dt.day) 
-                                           & (df_omie_global_pivot['Month'] == end_dt.month) 
-                                           & (df_omie_global_pivot['Year'] == end_dt.year)]
-
-    return tomorrow_df    
+    return df_omie_horario  
 
 
 # === EJECUCIÓN ===
 if __name__ == "__main__":
-    # === DATOS DE AUTENTICACIÓN ===
-
-    auth_url = "https://solaria-verticalpower-api.emeal.nttdata.com/login"
-    auth_payload = {
-        "client_id": "default",
-        "grant_type": "password",
-        "client_secret": "kqj8S7A3Y5G9AwN2YVQNAGolisfHA82c",
-        "scope": "openid",
-        "username": "vp-solaria-api",
-        "password": "kMyJJ3x2YtlV8dsZpynM2m6WBioPPq9H"
-    }
-
-
-
-    start_dt = datetime.date.today() - datetime.timedelta(days=3)
-    end_dt = datetime.date.today() + datetime.timedelta(days=1) # Dia de mañana, no cambiar
-
-    n_intentos = 0
-    max_intentos = 5
-    minutos_espera = 5
-    while n_intentos < max_intentos:
-        n_intentos += 1
-        print(f"Intentando extraer datos - Intento {n_intentos}/{max_intentos}")
- 
-        tomorrow_df = proceso_completo_extraccion(start_dt, end_dt, auth_url, auth_payload)
-
-        if not tomorrow_df.empty:
-            print("Datos extraídos correctamente.")
-            break
-
-        else:
-            print(f"No se obtuvieron datos para el día de mañana. Intentando nuevamente en {minutos_espera} minutos.")
-            time.sleep(minutos_espera * 60)
-
-
-    # Si no hay datos, se lanza un error
-    if tomorrow_df.empty:
-        asunto = "ERROR - Mercado Diario NTT Data"
-        mensaje = f"No se pudieron extraer los datos del mercado diario de OMIE para el dia {end_dt.year}-{end_dt.month}-{end_dt.day} mediante la API de NTT Data."
-        destinatario = "jnavarro@solariaenergia.com"
-        enviar_email_alerta(asunto, mensaje, destinatario)
-
-        raise ValueError(mensaje)
-
-    else:
-        asunto = "Mercado Diario NTT Data - Carga Correcta de Datos"
-        mensaje = f"""Se han extraido correctamente los datos del mercado diario de OMIE para el dia {end_dt.year}-{end_dt.month}-{end_dt.day} mediante la API de NTT Data."""
-        
-        destinatario = "jnavarro@solariaenergia.com"
-        enviar_email_alerta(asunto, mensaje, destinatario)
+    pass
 
