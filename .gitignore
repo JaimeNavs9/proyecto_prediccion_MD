@@ -1,0 +1,12 @@
+# Ignorar todo por defecto
+*
+
+# Excepciones: Permitir archivos .py, .ipynb y .csv
+!*.py
+!*.ipynb
+!*.csv
+!*/
+
+# Excepciones adicionales: Permitir el propio .gitignore y README.md (opcional)
+!.gitignore
+!README.md
