@@ -191,7 +191,7 @@ if __name__ == "__main__":
     indicator_ids = indicator_previsiones + [600]
     time_trunc = 'hour'
     geo_ids = [8741, 3]
-    start_date = datetime(2023, 1, 1)
+    start_date = datetime(2025, 1, 1)
     end_date = datetime(2025, 6, 30)
     df_previsiones = pd.DataFrame()
     for indicator_id in indicator_ids:
@@ -206,8 +206,8 @@ if __name__ == "__main__":
 
         df_previsiones = pd.concat([df_previsiones, df])
 
-        
-    # df_previsiones.to_csv('data_training/esios_previsiones_d+1.csv', index=False)
+
+    df_previsiones.to_csv('data_training/esios_previsiones_d+1.csv', index=False)
 
 
     
