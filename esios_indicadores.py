@@ -7,8 +7,6 @@ import requests
 import json
 import pandas as pd
 
-from NTT_diario import proceso_completo_extraccion
-
 pd.set_option('display.width', None)
 pd.set_option('display.max_columns', None)  # Sin límite de columnas visibles
 pd.set_option('display.width', 0)  # Configurar ancho dinámico para la pantalla
@@ -208,20 +206,7 @@ if __name__ == "__main__":
 
         df_previsiones = pd.concat([df_previsiones, df])
 
-
-    auth_url = "https://solaria-verticalpower-api.emeal.nttdata.com/login"
-    auth_payload = {
-        "client_id": "default",
-        "grant_type": "password",
-        "client_secret": "kqj8S7A3Y5G9AwN2YVQNAGolisfHA82c",
-        "scope": "openid",
-        "username": "vp-solaria-api",
-        "password": "kMyJJ3x2YtlV8dsZpynM2m6WBioPPq9H"
-    }
-
-    df_omie = proceso_completo_extraccion(start_date, end_date, auth_url, auth_payload)
-    print(df_omie)
-
+        
     # df_previsiones.to_csv('data_training/esios_previsiones_d+1.csv', index=False)
 
 
