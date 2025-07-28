@@ -141,6 +141,7 @@ def procesamiento_indicador_data_horario(data, geo_ids):
     df['indicator_id'] = data['indicator'].get('id')
 
     df = df[['indicator_id', 'Date', 'Hour', 'geo_id', 'value']]
+    df['Date'] = pd.to_datetime(df['Date']).dt.normalize()
 
     df = df.loc[df['geo_id'].isin(geo_ids)]
     return df
@@ -226,7 +227,7 @@ if __name__ == "__main__":
     df_previsiones_omie = pd.concat([df_previsiones, df_omie_md])
 
     ruta_dir = os.path.dirname(os.path.abspath(__file__))
-    df_previsiones_omie.to_csv(f"{ruta_dir}/data_training/esios_previsiones_d+1.csv", index=False)
+    df_previsiones_omie.to_csv(f"{ruta_dir}/data_training/esios_previsiones_d+1.csv", index=False, date_format='%Y-%m-%d')
 
 
     
