@@ -13,8 +13,8 @@ pd.set_option('display.width', 0)  # Configurar ancho dinámico para la pantalla
 pd.set_option('display.max_rows', 100)
 
 import os, sys
-# sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# from utils.connector import execute_query, insertar_dataframe_en_mysql
+sys.path.append(r"C:\Users\jnavarro\Solaria Energía y Medio Ambiente\00-GEN - Documentos\Base de Datos\python")
+from utils.connector import execute_query, insertar_dataframe_en_mysql
 
 
 def get_esios_data_raw(indicator_id, start_date, end_date, geo_ids, api_key, locale='es', time_agg=None, time_trunc=None, geo_agg=None, geo_trunc=None):
@@ -153,6 +153,21 @@ def list_geo_ids(data):
     return df
 
 
+def omie_data_mysql(start_date, end_date):
+    query = "SELECT year, month, day, Hour, Spain as value FROM omie.diario"
+    df_omie_md = execute_query(query, 'omie')
+    df_omie_md[['year', 'month', 'day', 'Hour']] = df_omie_md[['year', 'month', 'day', 'Hour']].astype(int)
+    df_omie_md['Date'] = pd.to_datetime(df_omie_md[['year', 'month', 'day']]).dt.normalize()
+
+    df_omie_md['indicator_id'] = 600
+    df_omie_md['geo_id'] = 3
+
+    df_omie_md = df_omie_md[['indicator_id', 'Date', 'Hour', 'geo_id', 'value']]
+    df_omie_md = df_omie_md.loc[(df_omie_md['Date'] >= start_date) & (df_omie_md['Date'] <= end_date)]
+    
+    return df_omie_md
+
+
 
 if __name__ == "__main__":
 
@@ -188,10 +203,10 @@ if __name__ == "__main__":
 
 
     # PREVISIONES d+1
-    indicator_ids = indicator_previsiones + [600]
+    indicator_ids = indicator_previsiones
     time_trunc = 'hour'
     geo_ids = [8741, 3]
-    start_date = datetime(2025, 1, 1)
+    start_date = datetime(2023, 1, 1)
     end_date = datetime(2025, 6, 30)
     df_previsiones = pd.DataFrame()
     for indicator_id in indicator_ids:
@@ -206,8 +221,12 @@ if __name__ == "__main__":
 
         df_previsiones = pd.concat([df_previsiones, df])
 
+    df_omie_md = omie_data_mysql(start_date, end_date)
+    print(df_omie_md.head(5))
+    df_previsiones_omie = pd.concat([df_previsiones, df_omie_md])
 
-    df_previsiones.to_csv('data_training/esios_previsiones_d+1.csv', index=False)
+    ruta_dir = os.path.dirname(os.path.abspath(__file__))
+    df_previsiones_omie.to_csv(f"{ruta_dir}/data_training/esios_previsiones_d+1.csv", index=False)
 
 
     
