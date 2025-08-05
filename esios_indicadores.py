@@ -155,6 +155,7 @@ def list_geo_ids(data):
 
 
 def omie_data_mysql(start_date, end_date):
+    # Mercado Diario
     query = "SELECT year, month, day, Hour, Spain as value FROM omie.diario"
     df_omie_md = execute_query(query, 'omie')
     df_omie_md[['year', 'month', 'day', 'Hour']] = df_omie_md[['year', 'month', 'day', 'Hour']].astype(int)
@@ -165,8 +166,24 @@ def omie_data_mysql(start_date, end_date):
 
     df_omie_md = df_omie_md[['indicator_id', 'Date', 'Hour', 'geo_id', 'value']]
     df_omie_md = df_omie_md.loc[(df_omie_md['Date'] >= start_date) & (df_omie_md['Date'] <= end_date)]
+
     
     return df_omie_md
+
+
+def perfil_solar_estandar(year_start, year_end):
+    query = "SELECT month, day, Hour, perfil AS value FROM omie.perfil_solar_estandar"
+    df_perfil = execute_query(query, 'omie')
+    df_perfil = df_perfil.merge(pd.DataFrame({'year':[x for x in range(year_start, year_end+1)]}), how='cross')
+    df_perfil[['year', 'month', 'day']] = df_perfil[['year', 'month', 'day']].astype(int)
+
+    df_perfil['Date'] = pd.to_datetime(df_perfil[['year', 'month', 'day']]).dt.normalize()
+    df_perfil['indicator_id'] = 'Perfil'
+    df_perfil['geo_id'] = 3
+
+    df_perfil = df_perfil[['indicator_id', 'Date', 'Hour', 'geo_id', 'value']]
+    return df_perfil
+
 
 
 
@@ -204,12 +221,15 @@ if __name__ == "__main__":
 
 
     # PREVISIONES d+1
-    indicator_ids = indicator_previsiones
+    indicator_ids = indicator_previsiones + [612, 613]
     time_trunc = 'hour'
     geo_ids = [8741, 3]
-    start_date = datetime(2023, 1, 1)
-    end_date = datetime(2025, 6, 30)
     df_previsiones = pd.DataFrame()
+
+
+    start_date = datetime(2022, 1, 1)
+    end_date = datetime(2023, 12, 31)
+
     for indicator_id in indicator_ids:
         data = get_esios_data_raw(indicator_id, start_date, end_date, geo_ids, api_key, time_agg=time_agg, time_trunc=time_trunc)
         # print(data)
@@ -222,8 +242,25 @@ if __name__ == "__main__":
 
         df_previsiones = pd.concat([df_previsiones, df])
 
+    start_date = datetime(2024, 1, 1)
+    end_date = datetime(2025, 6, 30)
+
+    for indicator_id in indicator_ids:
+        data = get_esios_data_raw(indicator_id, start_date, end_date, geo_ids, api_key, time_agg=time_agg, time_trunc=time_trunc)
+        # print(data)
+        if data is None:
+            print(f"No se pudo obtener datos para el indicador {indicator_id}.")
+            continue
+
+        df = procesamiento_indicador_data_horario(data, geo_ids)
+        print(df.head(5))
+
+        df_previsiones = pd.concat([df_previsiones, df])    
+
+
     df_omie_md = omie_data_mysql(start_date, end_date)
     print(df_omie_md.head(5))
+
     df_previsiones_omie = pd.concat([df_previsiones, df_omie_md])
 
     ruta_dir = os.path.dirname(os.path.abspath(__file__))
