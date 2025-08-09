@@ -258,7 +258,7 @@ if __name__ == "__main__":
         df_previsiones = pd.concat([df_previsiones, df])    
 
 
-    df_omie_md = omie_data_mysql(start_date, end_date)
+    df_omie_md = omie_data_mysql(datetime(2022, 1, 1), datetime(2025, 6, 30))
     print(df_omie_md.head(5))
 
     df_previsiones_omie = pd.concat([df_previsiones, df_omie_md])
