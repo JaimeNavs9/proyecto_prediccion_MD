@@ -62,7 +62,7 @@ def get_esios_data_raw(indicator_id, start_date, end_date, geo_ids, api_key, loc
     params = {
         "start_date": start_date,
         "end_date": end_date,
-        # "geo_ids": ','.join(geo_ids),
+        "geo_ids": ','.join(geo_ids),
         "locale": locale
     }
 
@@ -127,22 +127,38 @@ def procesamiento_indicador_data_horario(data, geo_ids):
         return pd.DataFrame()
     
     df = pd.DataFrame(values)
+    indicator_id = data['indicator'].get('id')
+    print(f"Procesando indicador {indicator_id}...")
+    df['indicator_id'] = indicator_id
 
     df['datetime'] = pd.to_datetime(df['datetime'], utc=True).dt.tz_convert('Europe/Madrid')
-    df['Date'] = df['datetime'].dt.date
-    df['Hour'] = df['datetime'].dt.hour + 1
+    n_geos = len(data['indicator']['geos'])
 
-    tiempo = data['indicator']['tiempo'][0]['name']
-    if tiempo != 'Hora':
-        print(f"Tiempo no valido: {tiempo}")
-        return pd.DataFrame()
-    
-    df['indicator_id'] = data['indicator'].get('id')
+    intervalo = (df['datetime'].iloc[n_geos] - df['datetime'].iloc[0]).total_seconds() / 60
+    print(f"Intervalo de tiempo entre datos: {intervalo} minutos")
 
-    df = df[['indicator_id', 'Date', 'Hour', 'geo_id', 'value']]
+    df['Date'] = df['datetime'].dt.date.astype(str)
     df['Date'] = pd.to_datetime(df['Date']).dt.normalize()
 
+    df['Hour'] = df['datetime'].dt.hour + 1
+
+    if int(intervalo) < 60:
+        magnitud = data['indicator']['magnitud'][0]['name']
+        print('Magnitud: ', magnitud)
+        if magnitud == 'Potencia':
+            df = df.groupby(['indicator_id', 'Date', 'Hour', 'geo_id'], as_index=False).agg({'value': 'mean'})
+        else:
+            df = df.groupby(['indicator_id', 'Date', 'Hour', 'geo_id'], as_index=False).agg({'value': 'sum'})
+        
+        df['value'] = df['value'].round(1)
+
+    elif int(intervalo) > 60:
+        print(f"Intervalo no valido")
+        return pd.DataFrame()
+
+    df = df[['indicator_id', 'Date', 'Hour', 'geo_id', 'value']]
     df = df.loc[df['geo_id'].isin(geo_ids)]
+
     return df
 
 
@@ -187,19 +203,22 @@ def perfil_solar_estandar(year_start, year_end):
 def preparacion_datos_modelo_d7(indicator_ids, start_date, end_date, api_key):
     df_global = pd.DataFrame()
     geo_ids = [8741, 3]
-    time_trunc = 'hour'
-    time_agg = 'sum'
+    # time_trunc = 'hour'
+    # time_agg = 'mean'
     for indicator_id in indicator_ids:
-        data = get_esios_data_raw(indicator_id, start_date, end_date, geo_ids, api_key, time_agg=time_agg, time_trunc=time_trunc)
-        print(data)
+        data = get_esios_data_raw(indicator_id, start_date, end_date, geo_ids, api_key)
+        # print(data)
         if data is None:
             print(f"No se pudo obtener datos para el indicador {indicator_id}.")
             continue
 
-        df = procesamiento_indicador_data(data, geo_ids)
-        print(df.head(100))
+        df = procesamiento_indicador_data_horario(data, geo_ids)
+        print(df.head(5))
 
         df_global = pd.concat([df_global, df])
+
+    df_omie_md = omie_data_mysql(start_date, end_date)
+    df_global = pd.concat([df_global, df_omie_md])
 
     return df_global
 
@@ -209,7 +228,7 @@ def preparacion_datos_modelo_d1(start_date, end_date, api_key):
     geo_ids = [8741, 3]
     indicator_ids = [1775, 1777, 1779, 612, 613]
     for indicator_id in indicator_ids:
-        data = get_esios_data_raw(indicator_id, start_date, end_date, geo_ids, api_key, time_agg=time_agg, time_trunc=time_trunc)
+        data = get_esios_data_raw(indicator_id, start_date, end_date, geo_ids, api_key)
         # print(data)
         if data is None:
             print(f"No se pudo obtener datos para el indicador {indicator_id}.")
@@ -244,8 +263,6 @@ if __name__ == "__main__":
     indicator_interconexiones = [10026] # Saldo total interconexiones
     indicator_previsiones = [1775, 1777, 1779] # Demanda, Eolica, Fotovoltaica - previsiones D+1
     
-    indicator_ids = indicator_demanda + indicator_generacion + indicator_pvpc + indicator_interconexiones + indicator_previsiones
-
     end_date = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
     start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
 
@@ -282,13 +299,20 @@ if __name__ == "__main__":
         612, 613 # IDA1 y IDA2
     ]
 
-    start_date = datetime(2025, 6, 1)
-    end_date = datetime(2025, 6, 30)
+    start_date = datetime(2023, 1, 1)
+    end_date = datetime(2025, 7, 1)
 
+    date_range = pd.date_range(start=start_date, end=end_date, freq='MS')
 
-    df_final = preparacion_datos_modelo_d7([551], start_date, end_date, api_key)
+    df_final = pd.DataFrame()
+    for i in range(len(date_range) - 1):
+        start = date_range[i]
+        end = date_range[i + 1] - timedelta(days=1)
 
+        df_period = preparacion_datos_modelo_d7(indicator_ids, start, end, api_key)
+        df_final = pd.concat([df_final, df_period])
 
+    df_final.to_csv('data_training/esios_dataset_d+7.csv', index=False, date_format='%Y-%m-%d')
 
 
 
