@@ -102,7 +102,6 @@ def procesamiento_indicador_data(data, geo_ids):
         minutes = pd.DataFrame({'Minute': [0, 15, 30, 45]})
         df = pd.merge(df, minutes, how='cross')
         df['Periodo'] = df['Hour'] * 4 + df['Minute'] // 15 + 1
-        df['value'] /= 4
 
     elif tiempo == 'Cinco minutos' or tiempo == 'Quince minutos':
         df['Minute'] = df['datetime'].dt.minute
@@ -185,6 +184,48 @@ def perfil_solar_estandar(year_start, year_end):
     return df_perfil
 
 
+def preparacion_datos_modelo_d7(indicator_ids, start_date, end_date, api_key):
+    df_global = pd.DataFrame()
+    geo_ids = [8741, 3]
+    time_trunc = 'hour'
+    time_agg = 'sum'
+    for indicator_id in indicator_ids:
+        data = get_esios_data_raw(indicator_id, start_date, end_date, geo_ids, api_key, time_agg=time_agg, time_trunc=time_trunc)
+        print(data)
+        if data is None:
+            print(f"No se pudo obtener datos para el indicador {indicator_id}.")
+            continue
+
+        df = procesamiento_indicador_data(data, geo_ids)
+        print(df.head(100))
+
+        df_global = pd.concat([df_global, df])
+
+    return df_global
+
+
+def preparacion_datos_modelo_d1(start_date, end_date, api_key):
+    time_trunc = 'hour'
+    geo_ids = [8741, 3]
+    indicator_ids = [1775, 1777, 1779, 612, 613]
+    for indicator_id in indicator_ids:
+        data = get_esios_data_raw(indicator_id, start_date, end_date, geo_ids, api_key, time_agg=time_agg, time_trunc=time_trunc)
+        # print(data)
+        if data is None:
+            print(f"No se pudo obtener datos para el indicador {indicator_id}.")
+            continue
+
+        df = procesamiento_indicador_data_horario(data, geo_ids)
+        print(df.head(5))
+
+        df_previsiones = pd.concat([df_previsiones, df])
+
+    df_omie_md = omie_data_mysql(start_date, end_date)
+
+    df_final = pd.concat([df_previsiones, df_omie_md])
+
+    return df_final
+
 
 
 if __name__ == "__main__":
@@ -221,50 +262,35 @@ if __name__ == "__main__":
 
 
     # PREVISIONES d+1
-    indicator_ids = indicator_previsiones + [612, 613]
-    time_trunc = 'hour'
-    geo_ids = [8741, 3]
-    df_previsiones = pd.DataFrame()
-
 
     start_date = datetime(2022, 1, 1)
     end_date = datetime(2023, 12, 31)
 
-    for indicator_id in indicator_ids:
-        data = get_esios_data_raw(indicator_id, start_date, end_date, geo_ids, api_key, time_agg=time_agg, time_trunc=time_trunc)
-        # print(data)
-        if data is None:
-            print(f"No se pudo obtener datos para el indicador {indicator_id}.")
-            continue
+    # df_final_d1 = preparacion_datos_modelo_d1(start_date, end_date, api_key)
 
-        df = procesamiento_indicador_data_horario(data, geo_ids)
-        print(df.head(5))
+    # ruta_dir = os.path.dirname(os.path.abspath(__file__))
+    # df_final_d1.to_csv(f"{ruta_dir}/data_training/esios_previsiones_d+1.csv", index=False, date_format='%Y-%m-%d')
 
-        df_previsiones = pd.concat([df_previsiones, df])
 
-    start_date = datetime(2024, 1, 1)
+    # Historico de indicadores - Modelo D+7
+    indicator_ids = [
+        551, # Gen T.Real Eólica
+        546, # Gen T.Real Hidraulica
+        1295, # Gen T.Real Solar Fotovoltaica
+        1293, # Demanda Real
+        10026, # Saldo Total Interconexiones
+        612, 613 # IDA1 y IDA2
+    ]
+
+    start_date = datetime(2025, 6, 1)
     end_date = datetime(2025, 6, 30)
 
-    for indicator_id in indicator_ids:
-        data = get_esios_data_raw(indicator_id, start_date, end_date, geo_ids, api_key, time_agg=time_agg, time_trunc=time_trunc)
-        # print(data)
-        if data is None:
-            print(f"No se pudo obtener datos para el indicador {indicator_id}.")
-            continue
 
-        df = procesamiento_indicador_data_horario(data, geo_ids)
-        print(df.head(5))
-
-        df_previsiones = pd.concat([df_previsiones, df])    
+    df_final = preparacion_datos_modelo_d7([551], start_date, end_date, api_key)
 
 
-    df_omie_md = omie_data_mysql(datetime(2022, 1, 1), datetime(2025, 6, 30))
-    print(df_omie_md.head(5))
 
-    df_previsiones_omie = pd.concat([df_previsiones, df_omie_md])
 
-    ruta_dir = os.path.dirname(os.path.abspath(__file__))
-    df_previsiones_omie.to_csv(f"{ruta_dir}/data_training/esios_previsiones_d+1.csv", index=False, date_format='%Y-%m-%d')
 
 
     
