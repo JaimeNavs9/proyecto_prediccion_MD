@@ -10,3 +10,4 @@
 # Excepciones adicionales: Permitir el propio .gitignore y README.md (opcional)
 !.gitignore
 !README.md
+!documentacion/Deep Learning*
