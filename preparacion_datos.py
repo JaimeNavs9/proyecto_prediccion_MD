@@ -61,7 +61,7 @@ def limpieza_df(df):
 
 if __name__ == "__main__":
     
-    start_date = datetime(2025, 1, 1)
+    start_date = datetime(2024, 1, 1)
     end_date = datetime(2025, 7, 1)
     indicator_id_dict = {
         551: 'Gen T.Real Eólica',
@@ -71,7 +71,8 @@ if __name__ == "__main__":
         1293: 'Demanda Real',
         10257: 'Gen P48 Total',
         612: 'IDA1',
-        613: 'IDA2'
+        613: 'IDA2',
+        600: 'MD'
     }
 
     indicator_ids = list(indicator_id_dict.keys())
