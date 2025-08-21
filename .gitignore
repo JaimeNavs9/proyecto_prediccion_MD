@@ -6,6 +6,7 @@
 !*.ipynb
 !*.csv
 !*/
+!*.keras
 
 # Excepciones adicionales: Permitir el propio .gitignore y README.md (opcional)
 !.gitignore
