@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta, time
 import requests
@@ -21,7 +22,7 @@ def get_df_indicadores_raw(start_date, end_date, indicator_ids):
     end_date_str = end_date.strftime('%Y-%m-%d')
     query_indicadores = ", ".join([f"'{x}'" for x in indicator_ids])
 
-    query = f"""SELECT Datetime, indicator_id, geo_id, magnitud_id, value FROM t_api_esios_indicadores_data 
+    query = f"""SELECT Datetime_utc, indicator_id, geo_id, magnitud_id, value FROM t_api_esios_indicadores_data 
                 WHERE Datetime BETWEEN '{start_date_str}' AND '{end_date_str}'
                 AND indicator_id IN ({query_indicadores})"""
     df = execute_query(query, 'esios')
@@ -33,8 +34,8 @@ def limpieza_df(df):
     global indicator_id_dict
     df_clean = df.copy()
 
-    df_clean['Datetime'] = pd.to_datetime(df_clean['Datetime'])
-    df_clean['Datetime_hour'] = df_clean['Datetime'].dt.strftime('%Y-%m-%d %H:00:00')
+    df_clean['Datetime_utc'] = pd.to_datetime(df_clean['Datetime_utc'])
+    df_clean['Datetime_hour'] = df_clean['Datetime_utc'].dt.strftime('%Y-%m-%d %H:00:00')
 
     df_precios_potencia = df_clean.loc[df_clean['magnitud_id']!=13]
     df_energia = df_clean.loc[df_clean['magnitud_id']==13]
@@ -48,13 +49,30 @@ def limpieza_df(df):
     # Hacer pivot - 1 columna por indicador
     df_clean_hour_pivot = df_clean_hour.pivot(index='Datetime_hour', columns='indicator_id', values='value').reset_index()
     
-    cols_round = [551, 546, 1295, 549, 1293, 10257]
-    df_clean_hour_pivot[cols_round] = df_clean_hour_pivot[cols_round].round(1)
 
     # Renombrar columnas
     df_clean_hour_pivot.rename(columns=indicator_id_dict, inplace=True)
-    print(df_clean_hour_pivot)
 
+    cols_round = [col for col in df_clean_hour_pivot.columns if col not in ['Datetime_hour', 'MD', 'IDA1', 'IDA2']]
+    df_clean_hour_pivot[cols_round] = df_clean_hour_pivot[cols_round].round(1)
+
+    # IDA1 y IDA2 - Tratamiento de nulos
+    df_clean_hour_pivot['IDA1'] = np.where(
+        df_clean_hour_pivot['IDA1'].isnull(),
+        np.where(df_clean_hour_pivot['IDA2'].isnull(), df_clean_hour_pivot['MD'], df_clean_hour_pivot['IDA2']),
+        df_clean_hour_pivot['IDA1']
+    )
+    df_clean_hour_pivot['IDA2'] = np.where(
+        df_clean_hour_pivot['IDA2'].isnull(),
+        np.where(df_clean_hour_pivot['IDA1'].isnull(), df_clean_hour_pivot['MD'], df_clean_hour_pivot['IDA1']),
+        df_clean_hour_pivot['IDA2']
+    )
+
+    # Generacion Fotovoltaica - Sustituimos nulos por 0
+    df_clean_hour_pivot['Gen.P48 Fotovoltaica'].fillna(0.0, inplace=True)
+
+    print(df_clean_hour_pivot)
+    print(df_clean_hour_pivot.info())
     return df_clean_hour_pivot
 
 
@@ -62,24 +80,26 @@ def limpieza_df(df):
 if __name__ == "__main__":
     
     start_date = datetime(2024, 1, 1)
-    end_date = datetime(2025, 7, 1)
+    end_date = datetime(2025, 8, 1)
     indicator_id_dict = {
-        551: 'Gen T.Real Eólica',
-        546: 'Gen T.Real Hidraulica',
-        1295: 'Gen T.Real Fotovoltaica',
-        549: 'Gen T.Real Nuclear',
-        1293: 'Demanda Real',
-        10257: 'Gen P48 Total',
+        10257: 'Gen.P48 Total',
+        10010: 'Gen.P48 Eolica',
+        84: 'Gen.P48 Fotovoltaica',
+        10027: 'Demanda P48',
+        10026: 'Interconexiones P48',
         612: 'IDA1',
         613: 'IDA2',
         600: 'MD'
     }
+
 
     indicator_ids = list(indicator_id_dict.keys())
     df = get_df_indicadores_raw(start_date, end_date, indicator_ids)
     print(df)
     
     df_final = limpieza_df(df)
+    print(df_final.loc[df_final['Gen.P48 Total'].isnull()])
+
     df_final.to_csv('data_training/esios_dataset_d+7.csv', index=False)
 
 
