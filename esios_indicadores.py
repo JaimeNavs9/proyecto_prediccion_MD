@@ -6,6 +6,11 @@ import requests
 import requests
 import json
 import pandas as pd
+import os, sys
+
+from sqlalchemy import create_engine, text, Table, MetaData
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import SQLAlchemyError, NoSuchTableError, OperationalError
 
 pd.set_option('display.width', None)
 pd.set_option('display.max_columns', None)  # Sin límite de columnas visibles
@@ -14,7 +19,36 @@ pd.set_option('display.max_rows', 100)
 
 import os, sys
 sys.path.append(r"C:\Users\jnavarro\Solaria Energía y Medio Ambiente\00-GEN - Documentos\Base de Datos\python")
-from utils.connector import execute_query, insertar_dataframe_en_mysql
+from utils.connector import userRead, passRead, hostDB # type: ignore
+
+
+def connect_to_db_sqlalchemy(user, password, host, database):
+    connection_string = f"mysql+pymysql://{user}:{password}@{host}/{database}"
+    engine = create_engine(connection_string, echo=False)
+    Session = sessionmaker(bind=engine)
+    return Session, engine
+
+
+def execute_query(query, database, user=userRead, password=passRead, host=hostDB):
+    """
+    Ejecuta una consulta SQL en la base de datos usando SQLAlchemy.
+    """
+    try:
+        Session, engine = connect_to_db_sqlalchemy(user, password, host, database)
+        with engine.connect() as connection:
+            if query.strip().lower().startswith("select") or query.strip().lower().startswith("show"):
+                # Para consultas SELECT, usa `connection.execute` para obtener un resultado
+                result = connection.execute(text(query))
+                # Convierte el resultado a un DataFrame
+                df = pd.DataFrame(result.fetchall(), columns=result.keys())
+                return df
+            else:
+                # Para consultas INSERT, UPDATE o DELETE
+                connection.execute(text(query))
+                return None
+    except Exception as e:
+        print(f"Error al ejecutar la consulta: {e}")
+        raise
 
 
 def get_esios_data_raw(indicator_id, start_date, end_date, geo_ids, api_key, locale='es', time_agg=None, time_trunc=None, geo_agg=None, geo_trunc=None):
@@ -224,7 +258,6 @@ def preparacion_datos_modelo_d7(indicator_ids, start_date, end_date, api_key):
 
 
 def preparacion_datos_modelo_d1(start_date, end_date, api_key):
-    time_trunc = 'hour'
     geo_ids = [8741, 3]
     indicator_ids = [1775, 1777, 1779, 612, 613]
     for indicator_id in indicator_ids:
