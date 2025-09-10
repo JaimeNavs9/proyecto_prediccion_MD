@@ -1,0 +1,214 @@
+import pandas as pd
+import numpy as np
+import datetime as dt
+import pytz
+import matplotlib.pyplot as plt
+import plotly.express as px
+import plotly.graph_objects as go
+
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GridSearchCV
+
+import scipy.stats as stats
+from sklearn.preprocessing import scale
+
+
+from tensorflow import keras
+from tensorflow.keras import layers # type: ignore
+from tensorflow.keras import regularizers # type: ignore
+
+
+###############################################################################
+# Lectura de datos
+###############################################################################
+
+df_data = pd.read_csv('data_training/predictores_modelo_futuro.csv')
+df_data['Datetime_hour'] = pd.to_datetime(df_data['Datetime_hour'])
+
+df_data['Year'] = df_data['Datetime_hour'].dt.year
+df_data['Month'] = df_data['Datetime_hour'].dt.month
+df_data['Day_of_Week'] = df_data['Datetime_hour'].dt.dayofweek
+df_data['Hour'] = df_data['Datetime_hour'].dt.hour
+
+df_input = df_data.drop(columns=['Datetime_hour'])
+
+
+
+###############################################################################
+# PARAMETROS
+###############################################################################
+
+num_test_days = 14
+num_val_days = 14
+
+n_neurons_1 = 64
+n_neurons_2 = 64
+dropout = 0.25
+
+lr = 0.0005
+patience = 12
+batch_size = 64
+
+cols_drop = ['IDA1_lag_24', 'IDA2_lag_24']
+
+
+
+###############################################################################
+# Preparación de datos
+###############################################################################
+
+df_input = df_input.drop(columns=[x for x in cols_drop if x in df_input.columns])
+df_input.dropna(inplace=True)
+
+# Division train-val-test
+X_train = df_input.drop('MD', axis=1).iloc[:len(df_input)-num_test_days*24-num_val_days*24]
+X_val = df_input.drop('MD', axis=1).iloc[-num_test_days*24-num_val_days*24:-num_test_days*24]
+X_test = df_input.drop('MD', axis=1).iloc[-num_test_days*24:]
+
+y_train = df_input['MD'].iloc[:len(df_input)-num_test_days*24-num_val_days*24]
+y_val = df_input['MD'].iloc[-num_test_days*24-num_val_days*24:-num_test_days*24]
+y_test = df_input['MD'].iloc[-num_test_days*24:]
+
+# Reescalado
+scaler_X = StandardScaler()
+scaler_y = StandardScaler()
+
+X_train_scaled = scaler_X.fit_transform(X_train)
+X_val_scaled = scaler_X.transform(X_val)
+X_test_scaled = scaler_X.transform(X_test)
+
+# Para la variable objetivo
+y_train_scaled = scaler_y.fit_transform(y_train.values.reshape(-1, 1)).flatten()
+y_val_scaled = scaler_y.transform(y_val.values.reshape(-1, 1)).flatten()
+y_test_scaled = scaler_y.transform(y_test.values.reshape(-1, 1)).flatten()
+
+
+
+###############################################################################
+# MODELO
+###############################################################################
+
+n_features = X_train.shape[1]
+
+# Entrada
+inputs = keras.Input(shape=(n_features,))
+# Primera capa interna
+x = layers.Dense(n_neurons_1, activation='relu', kernel_regularizer=regularizers.l2(1e-4))(inputs)
+x = layers.BatchNormalization()(x)
+x = layers.Dropout(dropout)(x)
+# Segunda capa interna
+x = layers.Dense(n_neurons_2, activation='relu', kernel_regularizer=regularizers.l2(1e-4))(x)
+x = layers.BatchNormalization()(x)
+x = layers.Dropout(dropout)(x)
+# Tercera capa interna
+x = layers.Dense(n_neurons_2, activation='relu', kernel_regularizer=regularizers.l2(1e-4))(x)
+x = layers.BatchNormalization()(x)
+x = layers.Dropout(dropout)(x)
+# Salida
+outputs = layers.Dense(1)(x)
+# Construccion del modelo
+model = keras.Model(inputs=inputs, outputs=outputs)
+
+model.compile(
+    optimizer=keras.optimizers.Adam(learning_rate=lr),
+    loss='mse',
+    metrics=['mae']  # MAE como métrica principal
+)
+
+callbacks = [
+    keras.callbacks.EarlyStopping(
+        monitor='val_mae',  # Monitorear MAE de validation
+        patience=patience,
+        restore_best_weights=True,
+        verbose=0
+    ),
+    keras.callbacks.ModelCheckpoint(
+        'modelos/modelo_futuro.keras',
+        monitor='val_mae',
+        save_best_only=True,
+        verbose=0
+    )
+]
+history = model.fit(
+    X_train_scaled, y_train_scaled,
+    validation_data=(X_val_scaled, y_val_scaled),  # Usar validation set
+    epochs=150,
+    batch_size=batch_size,
+    callbacks=callbacks,
+    verbose=2
+)
+
+
+
+###############################################################################
+# RESULTADOS
+###############################################################################
+
+# loss = history.history["mae"]
+# val_loss = history.history["val_mae"]
+# epochs = range(1, len(loss) + 1)
+# plt.figure()
+# plt.plot(epochs, loss, "bo", label="Training MAE")
+# plt.plot(epochs, val_loss, "b", label="Validation MAE")
+# plt.title("Training and validation MAE")
+# plt.legend()
+# plt.show()
+
+# Evaluar el modelo con el test set (datos nunca vistos)
+print("\n" + "="*50)
+print("EVALUACIÓN FINAL CON TEST SET")
+print("="*50)
+
+# Hacer predicciones en el test set
+y_pred_scaled = model.predict(X_test_scaled)
+y_pred = scaler_y.inverse_transform(y_pred_scaled.reshape(-1, 1)).flatten()
+y_real = scaler_y.inverse_transform(y_test_scaled.reshape(-1, 1)).flatten()
+
+
+# MAE
+mae_test = mean_absolute_error(y_real, y_pred)
+print(f"MAE en Test Set: {mae_test:.2f} €/MWh")
+print(f"Error absoluto medio: ±{mae_test:.2f} €/MWh")
+
+
+fechas_test = df_data['Datetime_hour'].iloc[-num_test_days*24:]
+
+# Crear un DataFrame con los datos para Plotly
+df_plot = pd.DataFrame({
+    'Fecha': fechas_test,
+    'Valor Real': y_real,
+    'Predicción': y_pred
+})
+
+# Crear el gráfico interactivo con Plotly Express
+fig = px.line(df_plot, x='Fecha', y=['Valor Real', 'Predicción'],
+              title='Predicciones vs Valores Reales (Test Set)',
+              labels={'value': 'Precio (Escala Original)', 'variable': 'Leyenda'},
+              color_discrete_map={'Valor Real': 'blue', 'Predicción': 'orange'})
+
+# Personalizar el gráfico
+fig.update_layout(
+    title_font_size=16,
+    xaxis_title='Fecha',
+    xaxis_title_font_size=14,
+    yaxis_title='Precio (Escala Original)',
+    yaxis_title_font_size=14,
+    legend_title='',
+    width=1000,
+    height=500,
+    template='plotly_white'
+)
+
+# Ajustar la opacidad de la línea de predicción
+fig.update_traces(opacity=0.7, selector={'name': 'Predicción'})
+
+# Mostrar la cuadrícula
+fig.update_xaxes(showgrid=True)
+fig.update_yaxes(showgrid=True)
+
+# Mostrar el gráfico
+fig.show()
