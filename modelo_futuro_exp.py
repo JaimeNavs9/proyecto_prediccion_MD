@@ -128,10 +128,10 @@ def proceso_completo_prediccion(df_input, n_capas, n_neurons_1, n_neurons_2, dro
             restore_best_weights=True,
             verbose=0
         ),
-        keras.callbacks.ModelCheckpoint(
-            f'modelos//{nombre_modelo}.keras',
+        keras.callbacks.EarlyStopping(
             monitor='val_mae',
-            save_best_only=True,
+            patience=patience,
+            restore_best_weights=True,  # <- restaurará los pesos mejores al final
             verbose=0
         )
     ]
