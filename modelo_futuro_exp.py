@@ -58,13 +58,13 @@ n_capas = 2
 nombre_modelo = 'm'
 
 
-def proceso_completo_prediccion(df_input, n_capas, n_neurons_1, n_neurons_2, dropout, lr, patience, batch_size, nombre_modelo, plot=True):
+def proceso_completo_prediccion(df_data, fecha_inicio, n_capas, n_neurons_1, n_neurons_2, dropout, lr, patience, batch_size, plot=True):
     global num_test_days, num_val_days, cols_drop
 
     ###############################################################################
     # Preparación de datos
     ###############################################################################
-
+    df_input = df_data.loc[df_data['Datetime_hour']>=fecha_inicio].drop(columns=['Datetime_hour'])
     df_input = df_input.drop(columns=[x for x in cols_drop if x in df_input.columns])
     df_input.dropna(inplace=True)
 
@@ -105,7 +105,7 @@ def proceso_completo_prediccion(df_input, n_capas, n_neurons_1, n_neurons_2, dro
     x = layers.BatchNormalization()(x)
     x = layers.Dropout(dropout)(x)
     # Resto de capas
-    for i in range(n_capas-1):
+    for _ in range(n_capas-1):
         x = layers.Dense(n_neurons_2, activation='relu', kernel_regularizer=regularizers.l2(1e-4))(x)
         x = layers.BatchNormalization()(x)
         x = layers.Dropout(dropout)(x)
@@ -174,7 +174,6 @@ def proceso_completo_prediccion(df_input, n_capas, n_neurons_1, n_neurons_2, dro
 
     # MAE
     mae_test = mean_absolute_error(y_real, y_pred)
-    print(f"MAE en Test Set: {mae_test:.2f} €/MWh")
     print(f"Error absoluto medio: ±{mae_test:.2f} €/MWh")
 
 
@@ -221,12 +220,11 @@ def proceso_completo_prediccion(df_input, n_capas, n_neurons_1, n_neurons_2, dro
 
 
 
-
-
+fechas_inicio = ['2025-01-01', '2024-01-01','2023-01-01']
 n_neurons_list = [32, 64, 128]
-dropout_list = [0.1, 0.25, 0.4, 0.55]
-lr_list = [0.0005, 0.001]
-patience_list = [8, 12, 16]
+dropout_list = [0.1, 0.25, 0.4]
+lr_list = [0.0001, 0.0005, 0.001]
+patience_list = [8, 16]
 batch_size_list = [32, 64]
 n_capas_list = [2, 3]
 
@@ -242,11 +240,12 @@ for n_capas in n_capas_list:
             for lr in lr_list:
                 for patience in patience_list:
                     for batch_size in batch_size_list:
-                        mae_test, history = proceso_completo_prediccion(df_input, n_capas, n_neurons, n_neurons, dropout, lr, patience, batch_size, 'm', plot=False)
+                        for fecha_inicio in fechas_inicio:
+                            mae_test, history = proceso_completo_prediccion(df_data, fecha_inicio, n_capas, n_neurons, n_neurons, dropout, lr, patience, batch_size, plot=False)
 
-                        entrada = {'n_capas': n_capas, 'n_neurons': n_neurons, 'dropout': dropout, 'lr': lr, 'patience': patience, 'batch_size': batch_size, 
-                                'RESULTADO': mae_test, 'n_epochs': len(history.history['val_mae'])}
-                        entradas.append(entrada)
+                            entrada = {'n_capas': n_capas, 'n_neurons': n_neurons, 'dropout': dropout, 'lr': lr, 'patience': patience, 'batch_size': batch_size, 
+                                    'RESULTADO': mae_test, 'n_epochs': len(history.history['val_mae'])}
+                            entradas.append(entrada)
 
 
 df_entradas = pd.DataFrame(entradas)
